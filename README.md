@@ -2,6 +2,9 @@
 
 Infraestructura como Código (IaC) para el aprovisionamiento, securización y operación de un nodo perimetral biomédico de bajo consumo basado en **DietPi**, orquestado mediante **Ansible** y respaldado localmente con **Btrfs** sobre **MicroSD High Endurance**.
 
+> **Estado del Proyecto:** 🟡 **En desarrollo — Fase 00 (Diseño de Arquitectura y Especificación Técnica) completada.**  
+> El código IaC (Ansible) y los scripts de aprovisionamiento se encuentran en proceso de implementación modular conforme al roadmap.
+
 ---
 
 ## 📋 Resumen del Proyecto
