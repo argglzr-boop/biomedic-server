@@ -94,4 +94,4 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
 
 ---
 
-> **Siguiente**: [resilience-strategy.md — Estrategia de Resiliencia y Recuperación →](https://www.google.com/search?q=resilience-strategy.md)
+> **Siguiente**: [compliance-security →](compliance-security.md)
