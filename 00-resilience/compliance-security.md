@@ -6,7 +6,13 @@ Este documento define la arquitectura de seguridad física, criptográfica y de 
 
 ### 1.1 Clasificación de los Datos Tratados
 
-Los datos procesados por este nodo **no se clasifican estrictamente como PHI (*Protected Health Information*)** en el sentido legal del término, dado que el sistema no actúa como entidad cubierta (*Covered Entity*) ni como socio comercial (*Business Associate*) bajo HIPAA, y no media una relación clínica regulada. No obstante, **se consideran datos críticos y totalmente confidenciales**: constituyen información de salud personal de carácter sensible cuya divulgación, alteración o pérdida podría afectar directamente la integridad y la privacidad del paciente. Por consiguiente, **deben ser protegidos con estándares equivalentes o superiores a los exigidos para PHI**, y el diseño del nodo se alinea voluntariamente con los principios técnicos de HIPAA y RGPD como marco de referencia de buenas prácticas.
+Los datos procesados por este nodo (glucosa capilar/intersticial, presión arterial, pulso cardíaco y toma de medicamentos) constituyen **datos personales sensibles** conforme a la **Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP)** de México, publicada en el Diario Oficial de la Federación el 20 de marzo de 2025 y en vigor desde el 21 de marzo de 2025. La ley incluye explícitamente el **"estado de salud presente o futuro"** dentro de la categoría de datos personales sensibles.
+
+* **No se aplica HIPAA** (*Health Insurance Portability and Accountability Act*), dado que el sistema no opera como entidad cubierta (*Covered Entity*) ni como socio comercial (*Business Associate*) bajo la jurisdicción de Estados Unidos.
+* **Sí se aplican las obligaciones de la LFPDPPP**: el responsable del tratamiento debe implementar medidas de seguridad administrativas, técnicas y físicas para proteger los datos contra daño, pérdida, alteración, destrucción o acceso no autorizado, y el nivel de seguridad debe corresponder a la sensibilidad de los datos. Al tratarse de datos de salud, se aplica el nivel más alto de protección.
+* La autoridad supervisora en materia de protección de datos personales en el sector privado es la **Secretaría Anticorrupción y Buen Gobierno**, a la que fueron transferidas las funciones del extinto INAI.
+
+En consecuencia, los datos deben ser protegidos con estándares equivalentes o superiores a los exigidos para información de salud protegida, y el diseño del nodo se alinea con los requisitos de seguridad para datos sensibles de la LFPDPPP, así como con los principios técnicos de NIST como marco de referencia de buenas prácticas.
 
 ### 1.2 Modelo de Amenazas Considerado
 
@@ -95,14 +101,22 @@ En sistemas con 512 MB de RAM y tarjetas de memoria flash, un demonio `auditd` c
 
 ---
 
-## 5. Matriz de Alineación con Principios HIPAA y RGPD
+## 5. Matriz de Alineación con LFPDPPP y Principios Técnicos de Referencia
 
-| Requisito Normativo | Implementación en Nodo Perimetral | Verificación Técnica |
+| Requisito Normativo (LFPDPPP) | Implementación en Nodo Perimetral | Verificación Técnica |
 | --- | --- | --- |
-| **Control de Acceso (§ 164.312(a)(1))** | Se deshabilita el acceso por contraseña; solo se admite autenticación mediante llaves SSH Ed25519; los servicios se ejecutan bajo usuarios sin privilegios de root (`uid/gid` dedicado). | `sshd_config`, `sudoers` auditado. |
-| **Cifrado en Reposo (§ 164.312(a)(2)(iv))** | Se emplea un contenedor LUKS2 sobre la partición que aloja la base de datos SQLite y los snapshots. | `lsblk`, `cryptsetup status`. |
-| **Cifrado en Tránsito (§ 164.312(e)(1))** | Se establece un túnel WireGuard punto a punto con cifrado simétrico ChaCha20 y autenticación Poly1305. | `wg show`. |
-| **Control de Integridad (§ 164.312(c)(1))** | Se utiliza el sistema de archivos Btrfs con sumas de verificación CRC32C/xxhash automáticas por bloque; SQLite en modo WAL. | `btrfs scrub status`. |
-| **Registro de Auditoría (§ 164.312(b))** | Se aplica auditoría granular del kernel vía `auditd` sobre el descriptor de archivo de la base de datos. | `ausearch -k phi_db_modification`. |
+| **Medidas de Seguridad para Datos Sensibles** (la ley exige medidas administrativas, técnicas y físicas para proteger datos personales sensibles) | Se deshabilita el acceso por contraseña; solo se admite autenticación mediante llaves SSH Ed25519; los servicios se ejecutan bajo usuarios sin privilegios de root (`uid/gid` dedicado); se emplea un contenedor LUKS2 sobre la partición que aloja la base de datos SQLite y los snapshots; se establece un túnel WireGuard punto a punto con cifrado simétrico ChaCha20 y autenticación Poly1305. | `sshd_config`, `sudoers` auditado, `lsblk`, `cryptsetup status`, `wg show`. |
+| **Principio de Confidencialidad** (obligación de confidencialidad para quienes tratan datos, subsistente tras finalizar la relación) | Sistema *single-tenant* con autenticación exclusiva por llave pública; ausencia de indexación de nombres, documentos de identidad o direcciones en la base de datos; correspondencia `Subject-UUID` ↔ ficha del paciente exclusivamente en el nodo central/clínico remoto. | `sshd_config`, esquema de la base de datos SQLite. |
+| **Control de Integridad** (protección contra alteración o destrucción indebida) | Se utiliza el sistema de archivos Btrfs con sumas de verificación CRC32C/xxhash automáticas por bloque; SQLite en modo WAL. | `btrfs scrub status`. |
+| **Registro de Auditoría** (mecanismos que registren y permitan examinar la actividad en sistemas que contienen datos sensibles) | Se aplica auditoría granular del kernel vía `auditd` sobre el descriptor de archivo de la base de datos y sobre los binarios del servicio de ingesta. | `ausearch -k phi_db_modification`. |
+| **Notificación de Incidentes de Seguridad** (obligación de notificar al titular ante vulneraciones que afecten de forma significativa sus derechos) | Monitoreo continuo de logs de `auditd` y verificación periódica de integridad mediante `btrfs scrub`; los eventos se transmiten por el enlace seguro para su revisión. | `ausearch`, `btrfs scrub status`, revisión periódica de logs. |
 
 ---
+
+## 6. 🔗 Referencias
+
+* [LFPDPPP — Ley Federal de Protección de Datos Personales en Posesión de los Particulares (DOF, 20 de marzo de 2025)](https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf)
+
+* [NIST — SP 800-111, Guide to Storage Encryption Technologies for End User Devices](https://www.nist.gov/publications/guide-storage-encryption-technologies-end-user-devices)
+
+* [NVD — CVE-2025-58356 (cryptsetup/LUKS2)](https://nvd.nist.gov/vuln/detail/cve-2025-58356)
