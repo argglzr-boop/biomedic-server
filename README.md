@@ -23,9 +23,9 @@ Infraestructura como Código (IaC) para el aprovisionamiento, securización y op
 ## 🗺️ Roadmap y Checklist de Implementación
 
 ### 📐 00 — Arquitectura y Visión Transversal
-- [x] **`00-architecture/overview.md`**: Topología funcional del nodo biomédico y arquitectura de 4 capas.
-- [x] **`00-architecture/compliance-security.md`**: Cifrado en reposo (LUKS), segregación de datos PHI y diseño de auditoría.
-- [ ] **`00-architecture/resilience-strategy.md`**: Objetivos RPO/RTO, modelo Btrfs 3-2-1 y retención de snapshots.
+- [x] **[`00-resilence/overview.md`](00-resilience/001-overview.md)**: Topología funcional del nodo biomédico y arquitectura de 4 capas.
+- [x] **[`00-resilence/compliance-security.md`](00-resilience/002-compliance-security.md)**: Cifrado en reposo (LUKS), segregación de datos PHI y diseño de auditoría.
+- [x] **[`00-resilence/resilience-strategy.md`](00-resilience/003-resilience-strategy.md)**: Objetivos RPO/RTO, modelo Btrfs 3-2-1 y retención de snapshots.
 
 ---
 
