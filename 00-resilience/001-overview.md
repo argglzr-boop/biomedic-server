@@ -14,7 +14,7 @@ Descripción arquitectónica, modelo por capas y topología funcional del servid
 | **Arquitectura de Cómputo** | Edge Computing ligero (ARM Cortex-A53 quad-core, 512 MB LPDDR2) |
 | **Entorno Base** | DietPi (Debian minimal optimizado para memoria reducida) |
 | **Estación de Gestión** | macOS (administración vía OpenSSH / Ansible) |
-| **Destino de Persistencia** | MicroSD High Endurance (Partición Btrfs con subvolúmenes y compresión zstd) |
+| **Destino de Persistencia** | MicroSD High Endurance (Partición dual: ext4 OS + ext4 datos con `noatime`) |
 
 ---
 
@@ -34,7 +34,7 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
 │  Kernel afinado, RAM-disk para logs, control de estado /etc │
 ├─────────────────────────────────────────────────────────────┤
 │  CAPA 1: HARDWARE & ALMACENAMIENTO PERSISTENTE (Pi Zero 2W) │
-│  MicroSD High Endurance: ext4 (/boot, OS) + Btrfs (@data)   │
+│  MicroSD High Endurance: ext4 (/boot, OS) + ext4 (@data)    │
 └─────────────────────────────────────────────────────────────┘
 
 ```
@@ -42,10 +42,10 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
 ### 2.1 Hardware y Almacenamiento Persistente
 
 * **MicroSD High/Max Endurance:** Unidad flash de grado industrial o videovigilancia (NAND de alta resistencia con controlador avanzado de *wear leveling*).
-* **Esquema de Particionado y Btrfs:**
+* **Esquema de Particionado y ext4:**
 * Partición base para el sistema operativo optimizada para lecturas.
-* Partición dedicada de datos en **Btrfs** con opciones de montaje orientadas a flash (`noatime`, compresión `zstd:1`) para reducir ciclos de escritura física.
-* Subvolúmenes aislados (`@data`, `@db_dumps`, `@snapshots`) para gestión atómica de estados y respaldos locales sin periféricos adicionales.
+* Partición dedicada de datos en **ext4** con opción de montaje `noatime` para reducir ciclos de escritura física.
+* Descarte de Btrfs por amplificación de escritura (CoW) y desgaste de la MicroSD, y de LVM por capas intermedias y consumo innecesario de metadatos en hardware limitado.
 
 
 
@@ -61,7 +61,7 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
 
 ### 2.4 Servicios y Persistencia de Telemetría
 
-* **Motor Relacional Transaccional (SQLite):** Ingesta de variables fisiológicas y metadatos clínicos con journaling optimizado (modo WAL), persistiendo en el subvolumen Btrfs configurado.
+* **Motor Relacional Transaccional (SQLite):** Ingesta de variables fisiológicas y metadatos clínicos con journaling optimizado (modo WAL), persistiendo en la partición de datos ext4 configurada.
 * **Telemetría del Nodo (Monitoring):** Exposición de métricas de salud (temperatura del SoC, uso de swap, I/O wait) para alertar antes de cualquier degradación térmica o de memoria.
 
 ---
@@ -77,7 +77,7 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
  │  ┌──────────────────────────────────────────────────┐  │
  │  │      MicroSD High Endurance (NAND Industrial)    │  │
  │  │  ├── Partición OS (ext4 / dietpi-ramlog)         │  │
- │  │  └── Partición Datos (Btrfs: @data, @snapshots)  │  │
+ │  │  └── Partición Datos (ext4 con noatime)          │  │
  │  └──────────────────────────────────────────────────┘  │
  └───────────────────────────┬────────────────────────────┘
                              │
@@ -92,4 +92,6 @@ Para garantizar contención de fallos, modularidad y bajo consumo de recursos en
 
 * [DietPi Documentación Oficial](https://dietpi.com/docs/)
 * [DietPi Optimización de Almacenamiento RAM-Log](https://www.google.com/search?q=https://dietpi.com/docs/software/system_stats/%23dietpi-ramlog)
-* [Btrfs Documentation & Mount Options](https://btrfs.readthedocs.io/)
+* [ext4 Documentation](https://www.kernel.org/doc/html/latest/filesystems/ext4/)
+
+
