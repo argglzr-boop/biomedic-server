@@ -1,4 +1,4 @@
-# Cumplimiento Normativo, Cifrado en Reposo y Auditoría de Seguridad
+# 002. Cumplimiento Normativo, Cifrado en Reposo y Auditoría de Seguridad
 
 > **Navegación**: [← overview](001-overview.md) | [resilence-strategy →](003-resilience-strategy.md)
 
@@ -23,7 +23,7 @@ En consecuencia, los datos deben ser protegidos con estándares equivalentes o s
 | **Extracción física del medio** | Sustracción de la MicroSD para lectura directa en otro hardware. | Se cifra la partición de datos mediante LUKS2 con llaves no almacenadas en texto plano en la flash. |
 | **Interceptación de tráfico** | Captura de paquetes en la red LAN local durante el transporte. | Se emplea encapsulado obligatorio punto a punto vía WireGuard (ChaCha20-Poly1305). |
 | **Acceso no autorizado al SO** | Intrusión remota o escalamiento de privilegios para consultar la BD. | Se aplica aislamiento por permisos POSIX, llaves Ed25519 y auditoría de llamadas al sistema con `auditd`. |
-| **Pérdida de integridad de datos** | Manipulación silenciosa o corrupción de lecturas médicas históricas. | Se verifica la integridad mediante checksums nativos de bloques con Btrfs y modo transaccional WAL en SQLite. |
+| **Pérdida de integridad de datos** | Manipulación silenciosa o corrupción de lecturas médicas históricas. | Se verifica la integridad mediante el modo transaccional WAL en SQLite y dumps lógicos de verificación; descarte de checksums de bloque nativos de Btrfs por su huella de RAM/CPU y amplificación de escritura en la MicroSD. |
 
 ---
 
@@ -35,12 +35,10 @@ Para cumplir con el principio de mínimo privilegio y minimizar la superficie ex
 [ MicroSD High Endurance ]
 ├── Partición 1 (ext4, ~3-4 GB): Sistema Base DietPi (Sin datos clínicos)
 |
-└── Partición 2 (Cifrada con LUKS2)
+└── Partición 2 (Cifrada con LUKS2, formateada en ext4)
     └── Dispositivo Mapeado: /dev/mapper/secure_data
-        └── Sistema de Archivos Btrfs
-            ├── Subvolumen @data (Ficheros crudos, configuración cifrada)
-            ├── Subvolumen @db   (Instancia SQLite de telemetría médica)
-            └── Subvolumen @snapshots (Copias atómicas de solo lectura)
+        └── Sistema de Archivos ext4 (noatime)
+            └── Directorio de datos clínicos (/opt/biomedic/data)
 ```
 
 ### 2.1 Identificación y Anonimización
@@ -51,7 +49,7 @@ Para cumplir con el principio de mínimo privilegio y minimizar la superficie ex
 
 ## 3. Cifrado en Reposo: Especificación LUKS2
 
-La partición secundaria de la MicroSD aloja el contenedor criptográfico de bloques gestionado por `cryptsetup` (dm-crypt).
+La partición secundaria de la MicroSD aloja el contenedor criptográfico de bloques gestionado por `cryptsetup` (dm-crypt), aplicado única y exclusivamente sobre la partición física de datos sensibles (base de datos), formateada en ext4 sobre el mapeador (`/dev/mapper/...`) para no degradar la CPU en lecturas del sistema operativo.
 
 ### 3.1 Parámetros de Cifrado
 * **Formato:** LUKS2.
@@ -67,7 +65,7 @@ Dado que el nodo es *headless* (sin teclado ni pantalla física), se sigue el si
    - Vía Ansible o sesión interactiva del administrador por red interna/VPN, se ejecuta:
      ```bash
      cryptsetup open /dev/mmcblk0p2 secure_data
-     mount -o subvol=@db,noatime,compress=zstd:1 /dev/mapper/secure_data /opt/biomedic/data
+     mount -o noatime /dev/mapper/secure_data /opt/biomedic/data
      systemctl start biomedic-ingestion.service
      ```
 4. **Protección en Apagado:** Al reiniciar o perder energía de forma imprevista, la clave desaparece de la memoria volátil y la partición queda sellada.
@@ -107,11 +105,11 @@ En sistemas con 512 MB de RAM y tarjetas de memoria flash, un demonio `auditd` c
 
 | Requisito Normativo (LFPDPPP) | Implementación en Nodo Perimetral | Verificación Técnica |
 | --- | --- | --- |
-| **Medidas de Seguridad para Datos Sensibles** (la ley exige medidas administrativas, técnicas y físicas para proteger datos personales sensibles) | Se deshabilita el acceso por contraseña; solo se admite autenticación mediante llaves SSH Ed25519; los servicios se ejecutan bajo usuarios sin privilegios de root (`uid/gid` dedicado); se emplea un contenedor LUKS2 sobre la partición que aloja la base de datos SQLite y los snapshots; se establece un túnel WireGuard punto a punto con cifrado simétrico ChaCha20 y autenticación Poly1305. | `sshd_config`, `sudoers` auditado, `lsblk`, `cryptsetup status`, `wg show`. |
+| **Medidas de Seguridad para Datos Sensibles** (la ley exige medidas administrativas, técnicas y físicas para proteger datos personales sensibles) | Se deshabilita el acceso por contraseña; solo se admite autenticación mediante llaves SSH Ed25519; los servicios se ejecutan bajo usuarios sin privilegios de root (`uid/gid` dedicado); se emplea un contenedor LUKS2 exclusivamente sobre la partición de datos sensibles, formateada en ext4; se establece un túnel WireGuard punto a punto con cifrado simétrico ChaCha20 y autenticación Poly1305. | `sshd_config`, `sudoers` auditado, `lsblk`, `cryptsetup status`, `wg show`. |
 | **Principio de Confidencialidad** (obligación de confidencialidad para quienes tratan datos, subsistente tras finalizar la relación) | Sistema *single-tenant* con autenticación exclusiva por llave pública; ausencia de indexación de nombres, documentos de identidad o direcciones en la base de datos; correspondencia `Subject-UUID` ↔ ficha del paciente exclusivamente en el nodo central/clínico remoto. | `sshd_config`, esquema de la base de datos SQLite. |
-| **Control de Integridad** (protección contra alteración o destrucción indebida) | Se utiliza el sistema de archivos Btrfs con sumas de verificación CRC32C/xxhash automáticas por bloque; SQLite en modo WAL. | `btrfs scrub status`. |
+| **Control de Integridad** (protección contra alteración o destrucción indebida) | Se utiliza SQLite en modo WAL para consistencia transaccional y dumps lógicos transaccionales (`.sql` comprimidos) previos a mantenimientos; descarte de checksums de bloque de Btrfs por su coste de RAM/CPU en 512 MB. | `PRAGMA integrity_check`, verificación de dumps. |
 | **Registro de Auditoría** (mecanismos que registren y permitan examinar la actividad en sistemas que contienen datos sensibles) | Se aplica auditoría granular del kernel vía `auditd` sobre el descriptor de archivo de la base de datos y sobre los binarios del servicio de ingesta. | `ausearch -k sensitive_db_modification`. |
-| **Notificación de Incidentes de Seguridad** (obligación de notificar al titular ante vulneraciones que afecten de forma significativa sus derechos) | Monitoreo continuo de logs de `auditd` y verificación periódica de integridad mediante `btrfs scrub`; los eventos se transmiten por el enlace seguro para su revisión. | `ausearch`, `btrfs scrub status`, revisión periódica de logs. |
+| **Notificación de Incidentes de Seguridad** (obligación de notificar al titular ante vulneraciones que afecten de forma significativa sus derechos) | Monitoreo continuo de logs de `auditd` y verificación periódica de integridad mediante `PRAGMA integrity_check` y validación de dumps; los eventos se transmiten por el enlace seguro para su revisión. | `ausearch`, `PRAGMA integrity_check`, revisión periódica de logs. |
 
 ---
 
@@ -122,5 +120,3 @@ En sistemas con 512 MB de RAM y tarjetas de memoria flash, un demonio `auditd` c
 * [NIST — SP 800-111, Guide to Storage Encryption Technologies for End User Devices](https://www.nist.gov/publications/guide-storage-encryption-technologies-end-user-devices)
 
 * [NVD — CVE-2025-58356 (cryptsetup/LUKS2)](https://nvd.nist.gov/vuln/detail/cve-2025-58356)
-
-
