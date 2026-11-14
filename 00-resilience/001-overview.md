@@ -1,4 +1,4 @@
-# 📐 00 — Visión General y Topología del Nodo Biomédico
+# 📐 001 — Visión General y Topología del Nodo Biomédico
 
 > **Siguiente**: [compliance-security →](002-compliance-security.md)
 
